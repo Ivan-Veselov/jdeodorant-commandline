@@ -1,5 +1,6 @@
 package ca.concordia.jdeodorant.eclipse.commandline;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -8,6 +9,7 @@ import java.lang.management.ThreadMXBean;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,6 +21,8 @@ import java.util.ListIterator;
 import java.util.Map;
 import java.util.TreeSet;
 
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 import org.eclipse.core.filebuffers.FileBuffers;
 import org.eclipse.core.filebuffers.ITextFileBuffer;
 import org.eclipse.core.filebuffers.ITextFileBufferManager;
@@ -98,6 +102,7 @@ import gr.uom.java.ast.AbstractMethodDeclaration;
 import gr.uom.java.ast.ClassDeclarationObject;
 import gr.uom.java.ast.CompilationErrorDetectedException;
 import gr.uom.java.ast.CompilationUnitCache;
+import gr.uom.java.ast.Standalone;
 import gr.uom.java.ast.SystemObject;
 import gr.uom.java.ast.decomposition.cfg.CFG;
 import gr.uom.java.ast.decomposition.cfg.PDG;
@@ -112,6 +117,7 @@ import gr.uom.java.ast.decomposition.cfg.mapping.DivideAndConquerMatcher;
 import gr.uom.java.ast.decomposition.cfg.mapping.PDGMapper;
 import gr.uom.java.ast.decomposition.cfg.mapping.PDGRegionSubTreeMapper;
 import gr.uom.java.ast.decomposition.matching.NodePairComparisonCache;
+import gr.uom.java.distance.MoveMethodCandidateRefactoring;
 import gr.uom.java.jdeodorant.refactoring.manipulators.ExtractCloneRefactoring;
 import jxl.Sheet;
 import jxl.Workbook;
@@ -125,6 +131,8 @@ import jxl.write.WritableHyperlink;
 import jxl.write.WritableSheet;
 import jxl.write.WritableWorkbook;
 import jxl.write.WriteException;
+
+import static java.nio.file.StandardOpenOption.CREATE_NEW;
 
 @SuppressWarnings("restriction")
 public class Application implements IApplication {
@@ -171,6 +179,50 @@ public class Application implements IApplication {
 				if (jProject == null) {
 					throw new RuntimeException("The project \"" + projectName + "\" is not opened in the workspace. Cannot continue.");
 				}
+				
+				
+				if (true) {
+					List<MoveMethodCandidateRefactoring> opportunities = Standalone.getMoveMethodRefactoringOpportunities(jProject);
+					
+					java.nio.file.Path filePath = Paths.get(ResourcesPlugin.getWorkspace().getRoot().getLocationURI().getPath());
+					filePath = filePath.resolve(cliParser.getProjectName() + ".csv");
+					
+					try (
+                        BufferedWriter writer = Files.newBufferedWriter(filePath, CREATE_NEW);
+                        CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.RFC4180)
+                    ) {
+						for (MoveMethodCandidateRefactoring candidate : opportunities) {
+							String methodName = candidate.getSource() + "." + candidate.getMovedMethodName();
+							String pathToSourceFile = candidate.getSourceClass().getClassObject().getIFile().getFullPath().toOSString();
+							int fileOffset = candidate.getSourceMethod().getMethodObject().getMethodDeclaration().getStartPosition();
+							
+							String targetClassName = candidate.getTarget();
+							String pathToSourceFileWithTargetClass = candidate.getTargetClass().getClassObject().getIFile().getFullPath().toOSString();
+							int targetClassFileOffset = candidate.getTargetClass().getClassObject().getAbstractTypeDeclaration().getStartPosition();
+							
+							csvPrinter.printRecord(
+								methodName,
+								pathToSourceFile,
+								fileOffset,
+								targetClassName,
+								pathToSourceFileWithTargetClass,
+								targetClassFileOffset
+                            );
+						}
+                    }
+					
+					System.out.println("Project has been processed");
+					
+					return IApplication.EXIT_OK;
+				}
+				
+				
+				
+				
+				
+				
+				
+				
 				// If the application mode is not ApplicationMode.PARSE, we have to parse the project and make AST, otherwise, we don't need it. 
 				if (applicationMode != ApplicationMode.PARSE) {
 					parseJavaProject(jProject);
